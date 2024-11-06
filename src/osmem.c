@@ -69,9 +69,9 @@ block_meta *alloc_mem(block_meta *last, size_t size)
 
 void break_block(block_meta *block, size_t size)
 {
-	if (block->size - size - __META_SIZE__ < 8)
+	if (block->size - size< 8 + __META_SIZE__)
 		return;
-    block_meta *next = (block_meta *)((void *)block + size + __META_SIZE__);
+    block_meta *next = (block_meta *)((char *)block + size + __META_SIZE__);
 	next->size = block->size - size - __META_SIZE__;
 	next->status = STATUS_FREE;
 	next->prev = block;
@@ -121,10 +121,10 @@ void *os_malloc(size_t size)
 		return blocker + 1;
 	}
 	if (base == NULL) {
-		base = sbrk(__MAP_TRESHHOLD__);
-		block_meta *blocker = (block_meta *)base;
+		base = sbrk(0);
+		block_meta *blocker = (block_meta *)sbrk(__MAP_TRESHHOLD__);
 
-		blocker->size = size;
+		blocker->size = __MAP_TRESHHOLD__ - __META_SIZE__;
 		blocker->status = STATUS_ALLOC;
 		blocker->prev = NULL;
 		blocker->next = NULL;
