@@ -11,7 +11,6 @@
 #define STATUS_MAPPED 2
 
 static void *base;
-#pragma once
 
 #include <errno.h>
 #include <stdio.h>
@@ -123,7 +122,8 @@ void *os_malloc(size_t size)
 		size += 8;
 	}
 	if (size >= __MAP_TRESHHOLD__ - __META_SIZE__) {
-		block_meta *blocker = (block_meta *)mmap(NULL, size + __META_SIZE__, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+		block_meta *blocker = (block_meta *)mmap(NULL, size + __META_SIZE__, PROT_READ
+							   | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
 		blocker->next = NULL;
 		blocker->prev = NULL;
@@ -201,6 +201,47 @@ void *os_calloc(size_t nmemb, size_t size)
 
 void *os_realloc(void *ptr, size_t size)
 {
-	/* TODO: Implement os_realloc */
-	return NULL;
+	if (ptr == NULL)
+		return os_malloc(size);
+	if (size % 8 != 0) {
+		size -= size % 8;
+		size += 8;
+	}
+	block_meta *blocker = (block_meta *)(ptr - __META_SIZE__);
+
+	if (blocker->status == STATUS_FREE)
+		return NULL;
+	if (size == 0) {
+		os_free(ptr);
+		return NULL;
+	}
+	if (blocker->status == STATUS_MAPPED) {
+		char *old_vec = (char *)(&blocker[1]);
+		char *new_vec = (char *)os_malloc(size);
+
+		for (size_t i = 0; i < blocker->size && i < size; i++)
+			new_vec[i] = old_vec[i];
+		munmap((void *)blocker, blocker->size + __META_SIZE__);
+		return (void *)new_vec;
+	} else if (blocker->size >= size) {
+		break_block(blocker, size);
+		return ptr;
+	} else if (blocker->next == NULL) {
+		sbrk(size - blocker->size);
+		blocker->size = size;
+		return ptr;
+	} else if (blocker->next->status == STATUS_FREE && size <= blocker->size + blocker->next->size + __META_SIZE__) {
+		blocker->size = blocker->size + blocker->next->size + __META_SIZE__;
+		if (blocker->next->next != NULL)
+			blocker->next->next->prev = blocker;
+		blocker->next = blocker->next->next;
+		return ptr;
+	}
+	char *new_vec = (char *)os_malloc(size);
+	char *old_vec = (char *)(&blocker[1]);
+
+	for (size_t i = 0; i < blocker->size && i < size; i++)
+		new_vec[i] = old_vec[i];
+	os_free((void *)old_vec);
+	return (void *)new_vec;
 }
